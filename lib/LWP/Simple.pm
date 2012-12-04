@@ -11,6 +11,9 @@ our $VERSION = '0.085';
 
 enum RequestType <GET POST>;
 
+has $.socketclass = IO::Socket::INET;
+our $class_socketclass = IO::Socket::INET;
+
 has Str $.default_encoding = 'utf-8';
 our $.class_default_encoding = 'utf-8';
 
@@ -184,7 +187,8 @@ method make_request (
 
     my $headers = self.stringify_headers(%headers);
 
-    my IO::Socket::INET $sock .= new(:$host, :$port);
+    my $typeobj = self ?? $.socketclass !! $class_socketclass;
+    my $sock = $typeobj.new(:$host, :$port);
     my Str $req_str = $rt.Stringy ~ " {$path} HTTP/1.1\r\n"
         ~ $headers
         ~ "\r\n";
