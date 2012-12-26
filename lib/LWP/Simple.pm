@@ -169,7 +169,9 @@ method parse_chunks(Buf $b is rw, IO::Socket::INET $sock) {
         else {
 #            say 'extend bytes ', $b.bytes, ' start ', $chunk_start, ' data ', $b.subbuf($chunk_start).decode('ascii');
             # maybe odd case of buffer has just part of header at end
-            $b ~= $sock.read(20);
+            my $chunk = $sock.read(20);
+            last unless $chunk.bytes;
+            $b ~= $chunk;
         }
     }
 
@@ -181,7 +183,7 @@ method parse_chunks(Buf $b is rw, IO::Socket::INET $sock) {
 method make_request (
     RequestType $rt, $host, $port as Int, $path, %headers, $content?
 ) {
-
+    my Bool $is_last_chunk;
     my $headers = self.stringify_headers(%headers);
 
     my IO::Socket::INET $sock .= new(:$host, :$port);
@@ -196,12 +198,19 @@ method make_request (
     $sock.send($req_str);
 
     my Buf $resp = $sock.read($default_stream_read_len);
+    while ($resp.bytes < $default_stream_read_len) {
+        my $r = $sock.read($default_stream_read_len);
+        $resp ~= $r;
+        if $r.bytes == 0 {
+            $is_last_chunk = True;
+            last;
+        }
+    }
 
     my ($status, $resp_headers, $resp_content) = self.parse_response($resp);
 
 
     if (($resp_headers<Transfer-Encoding> || '') eq 'chunked') {
-        my Bool $is_last_chunk;
         my Buf $resp_content_chunk;
 
         ($is_last_chunk, $resp_content) =
